@@ -9,3 +9,9 @@ Implementation includes:
 - Decommitment
 - Query phase
 - Test for folding of Polynomial
+
+For testing :
+
+```bash
+cargo test
+```
