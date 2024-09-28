@@ -1,5 +1,21 @@
-use lambdaworks_math::field::{element::FieldElement, traits::IsField};
-use lambdaworks_math::polynomial::Polynomial;
+use lambdaworks_crypto::merkle_tree::backends::types::Keccak256Tree;
+use lambdaworks_crypto::merkle_tree::merkle::MerkleTree;
+use lambdaworks_math::{
+    // fft::polynomial::FFTPoly,
+    fft::polynomial::FFTPoly,
+    field::{
+        element::FieldElement,
+        traits::{IsFFTField, IsField},
+    },
+    polynomial::Polynomial,
+    traits::ByteConversion,
+};
+
+// Merkle Trees configuration
+
+// Security of both hashes should match
+pub type FriMerkleTreeBackend<F> = Keccak256Tree<F>; // should be tree
+pub type FriMerkleTree<F> = MerkleTree<FriMerkleTreeBackend<F>>;
 
 // folding divides the polynomail in even and odd coefficientsa and then combines them using a constant beta to reduce the final degree of the polynomial by 2.
 // Hence this helps achieve reduce the polynomail to a constant value in log2(N) setps
@@ -27,7 +43,12 @@ where
 }
 
 // create layers
-pub struct FRILayer<F> {
+#[derive(Clone)]
+pub struct FRILayer<F>
+where
+    F: IsField,
+    FieldElement<F>: ByteConversion,
+{
     pub evals: Vec<FieldElement<F>>,
     pub merkle_tree: FriMerkleTree<F>, //for committing our evals
     pub coset_offset: FieldElement<F>, //Generally added for evaluation in coset FFT
@@ -36,21 +57,40 @@ pub struct FRILayer<F> {
 
 // consider adding how the merkle tree is actually created
 impl<F> FRILayer<F>
+where
+    F: IsField + IsFFTField,
+    FieldElement<F>: ByteConversion,
 {
-    pub fn new(poly:&Polynomial<FieldElement<F>>,coset_offset:&FieldElement<F>,domain_size:usize)->Seld=f{
-        let evals=poly.evaluate_offset_fft(1,Some(domain_size),coset_offset).unwrap();
+    pub fn new(
+        poly: &Polynomial<FieldElement<F>>,
+        coset_offset: &FieldElement<F>,
+        domain_size: usize,
+    ) -> Self {
+        let evals = poly
+            .evaluate_offset_fft(1, Some(domain_size), coset_offset)
+            .unwrap();
 
-        let merkle_tree=FriMerkleTree::build(&evals);
+        let merkle_tree = FriMerkleTree::build(&evals);
 
-        Self{
+        Self {
             evals,
             merkle_tree,
-            coset_offset.clone(),
+            coset_offset: coset_offset.clone(),
             domain_size,
         }
     }
 }
-// commitment phase
+
+// Commitment phase
+
+// The commit phase will give us a vector of layers and the final value of the FRI protocol (when we get to a degree zero polynomial)
+// pub commit_phase(number_of_layers:usize,
+//     p_0: Polynomial<FieldElement<F>>,
+//     transcript: &mut T,
+//     coset_offset: &FieldElement<F>,
+//     domain_size: usize,)->(Vec<FRILayer<F>>,FieldElement<F>){
+
+// }
 
 // decommitment phase
 
