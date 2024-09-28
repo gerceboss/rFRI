@@ -250,6 +250,36 @@ where
     }
 }
 
-fn main() {
-    println!("Hello, world!");
+#[cfg(test)]
+mod tests {
+    use super::fold_polynomial;
+    use lambdaworks_math::field::element::FieldElement;
+    use lambdaworks_math::field::fields::u64_prime_field::U64PrimeField;
+    use lambdaworks_math::polynomial::Polynomial;
+    const MODULUS: u64 = 293;
+    type F = FieldElement<U64PrimeField<MODULUS>>;
+
+    #[test]
+    fn test_fold() {
+        let p0 = Polynomial::new(&[
+            F::new(3),
+            F::new(1),
+            F::new(2),
+            F::new(7),
+            F::new(3),
+            F::new(5),
+        ]);
+        let beta = F::new(4);
+        let p1 = fold_polynomial(&p0, &beta);
+        assert_eq!(p1, Polynomial::new(&[F::new(7), F::new(30), F::new(23),]));
+
+        let gamma = F::new(3);
+        let p2 = fold_polynomial(&p1, &gamma);
+        assert_eq!(p2, Polynomial::new(&[F::new(97), F::new(23),]));
+
+        let delta = F::new(2);
+        let p3 = fold_polynomial(&p2, &delta);
+        assert_eq!(p3, Polynomial::new(&[F::new(143)]));
+        assert_eq!(p3.degree(), 0);
+    }
 }
