@@ -1,6 +1,7 @@
 use lambdaworks_crypto::fiat_shamir::transcript::Transcript;
 use lambdaworks_crypto::merkle_tree::backends::types::Keccak256Tree;
 use lambdaworks_crypto::merkle_tree::merkle::MerkleTree;
+use lambdaworks_crypto::merkle_tree::proof::Proof;
 use lambdaworks_math::{
     // fft::polynomial::FFTPoly,
     fft::polynomial::FFTPoly,
@@ -17,6 +18,10 @@ use lambdaworks_math::{
 // Security of both hashes should match
 pub type FriMerkleTreeBackend<F> = Keccak256Tree<F>; // should be tree
 pub type FriMerkleTree<F> = MerkleTree<FriMerkleTreeBackend<F>>;
+
+// for 256 bits it is 32, for 512 it should be 64
+pub const COMMITMENT_SIZE: usize = 32;
+pub type Commitment = [u8; COMMITMENT_SIZE];
 
 /// Uses randomness from the transcript to create a FieldElement
 /// One bit less than the max used by the FieldElement is used as randomness. For StarkFields, this would be 251 bits randomness.
@@ -53,6 +58,13 @@ where
     FieldElement::from_bytes_be(randomness).unwrap()
 }
 
+pub fn transcript_to_usize<T: Transcript>(transcript: &mut T) -> usize {
+    const CANT_BYTES_USIZE: usize = (usize::BITS / 8) as usize;
+    let value = transcript.challenge()[..CANT_BYTES_USIZE]
+        .try_into()
+        .unwrap();
+    usize::from_be_bytes(value)
+}
 // folding divides the polynomail in even and odd coefficientsa and then combines them using a constant beta to reduce the final degree of the polynomial by 2.
 // Hence this helps achieve reduce the polynomail to a constant value in log2(N) setps
 pub fn fold_polynomial<F>(
@@ -175,8 +187,68 @@ where
 }
 
 // decommitment phase
+// implement serialisation and deserialisation
+pub struct FriDecommitment<F: IsPrimeField> {
+    pub layers_auth_paths_sym: Vec<Proof<Commitment>>,
+    pub layers_evaluations_sym: Vec<FieldElement<F>>,
+    pub layers_auth_paths: Vec<Proof<Commitment>>,
+    pub layers_evaluations: Vec<FieldElement<F>>,
+}
 
-// query phase for verification
+// query phase and verification
+pub fn fri_query_phase<F, T>(
+    queries: i32, // should come from number of constraints in an AIR
+    domain_size: usize,
+    fri_layers: &Vec<FRILayer<F>>,
+    transcript: &mut T,
+) -> (Vec<FriDecommitment<F>>, Vec<usize>)
+where
+    F: IsFFTField,
+    T: Transcript,
+    FieldElement<F>: ByteConversion,
+{
+    if !fri_layers.is_empty() {
+        let number_of_queries = queries;
+        let iotas = (0..number_of_queries)
+            .map(|_| transcript_to_usize(transcript) % domain_size)
+            .collect::<Vec<usize>>();
+        let query_list = iotas
+            .iter()
+            .map(|iota_s| {
+                // Receive challenge  (iota_s)
+                let mut layers_auth_paths_sym = vec![];
+                let mut layers_evaluations_sym = vec![];
+                let mut layers_evaluations = vec![];
+                let mut layers_auth_paths = vec![]; //paths for authentication of inclusion
+
+                for layer in fri_layers {
+                    // symmetric element
+                    let index = iota_s % layer.domain_size;
+                    let index_sym = (iota_s + layer.domain_size / 2) % layer.domain_size;
+                    let evaluation_sym = layer.evals[index_sym].clone();
+                    let auth_path_sym = layer.merkle_tree.get_proof_by_pos(index_sym).unwrap();
+                    let evaluation = layer.evals[index].clone();
+                    let auth_path = layer.merkle_tree.get_proof_by_pos(index).unwrap();
+                    layers_auth_paths_sym.push(auth_path_sym);
+                    layers_evaluations_sym.push(evaluation_sym);
+                    layers_evaluations.push(evaluation);
+                    layers_auth_paths.push(auth_path);
+                }
+
+                FriDecommitment {
+                    layers_auth_paths_sym,
+                    layers_evaluations_sym,
+                    layers_evaluations,
+                    layers_auth_paths,
+                }
+            })
+            .collect();
+
+        (query_list, iotas)
+    } else {
+        (vec![], vec![])
+    }
+}
 
 fn main() {
     println!("Hello, world!");
