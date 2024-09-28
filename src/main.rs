@@ -1,8 +1,6 @@
 use lambdaworks_math::field::{element::FieldElement, traits::IsField};
 use lambdaworks_math::polynomial::Polynomial;
 
-
-
 // folding divides the polynomail in even and odd coefficientsa and then combines them using a constant beta to reduce the final degree of the polynomial by 2.
 // Hence this helps achieve reduce the polynomail to a constant value in log2(N) setps
 pub fn fold_polynomial<F>(
@@ -28,9 +26,30 @@ where
     even_poly + odd_poly
 }
 
-
 // create layers
+pub struct FRILayer<F> {
+    pub evals: Vec<FieldElement<F>>,
+    pub merkle_tree: FriMerkleTree<F>, //for committing our evals
+    pub coset_offset: FieldElement<F>, //Generally added for evaluation in coset FFT
+    pub domain_size: usize,            // to get the size to start with
+}
 
+// consider adding how the merkle tree is actually created
+impl<F> FRILayer<F>
+{
+    pub fn new(poly:&Polynomial<FieldElement<F>>,coset_offset:&FieldElement<F>,domain_size:usize)->Seld=f{
+        let evals=poly.evaluate_offset_fft(1,Some(domain_size),coset_offset).unwrap();
+
+        let merkle_tree=FriMerkleTree::build(&evals);
+
+        Self{
+            evals,
+            merkle_tree,
+            coset_offset.clone(),
+            domain_size,
+        }
+    }
+}
 // commitment phase
 
 // decommitment phase
